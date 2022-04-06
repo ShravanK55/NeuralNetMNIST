@@ -225,4 +225,4 @@ if __name__ == "__main__":
     print("Testing dataset accuracy: {}".format(num_correct / len(test_images)))
 
     # Writing the output to a CSV file.
-    output.tofile(OUTPUT_PATH, sep='\n')
+    predictions.tofile(OUTPUT_PATH, sep='\n')
