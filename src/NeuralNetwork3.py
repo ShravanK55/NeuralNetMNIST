@@ -184,7 +184,6 @@ class NeuralNetwork:
         """
         for epoch in range(self.epochs):
             print("Epoch {}.".format(epoch))
-            num_samples = len(images)
             num_correct = 0
             for batch_idx in range(0, len(images), self.batch_size):
                 self.forward_pass(images[batch_idx : batch_idx + self.batch_size].T)
@@ -194,7 +193,7 @@ class NeuralNetwork:
                 expected_output = classify(labels[batch_idx : batch_idx + self.batch_size].T)
                 num_correct += len([0 for i in range(len(output)) if output[i] == expected_output[i]])
 
-            accuracy = num_correct / num_samples
+            accuracy = num_correct / len(images)
             print("Accuracy: {}".format(accuracy))
 
 
@@ -219,9 +218,11 @@ if __name__ == "__main__":
     neural_network.train(train_images, one_hot_train_labels)
 
     # Getting the predictions from the testing dataset and getting the prediction accuracy.
-    nn_output = neural_network.forward_pass(test_images)
-    output = classify(nn_output)
-    expected_output = classify(one_hot_test_labels.T)
-    num_correct = len([0 for i in range(len(output)) if output[i] == expected_output[i]])
-    num_samples = len(test_images)
-    print("Testing dataset accuracy: {}".format(num_correct / num_samples))
+    output = neural_network.forward_pass(test_images.T)
+    predictions = classify(output)
+    expected_predictions = classify(one_hot_test_labels.T)
+    num_correct = len([0 for i in range(len(predictions)) if predictions[i] == expected_predictions[i]])
+    print("Testing dataset accuracy: {}".format(num_correct / len(test_images)))
+
+    # Writing the output to a CSV file.
+    output.tofile(OUTPUT_PATH, sep='\n')
