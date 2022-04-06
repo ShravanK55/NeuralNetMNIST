@@ -54,22 +54,18 @@ def softmax(x):
     return inp_exp / np.sum(inp_exp, axis=0, keepdims=True)
 
 
-def cross_entropy_loss(out, expected_out):
+def classify(out):
     """
-    Function to calculate the cross entropy loss.
+    Method to get the classification for images from the output of the neural network.
 
     Args:
         out(np.array): Output of the neural network.
-        expected_out(np.array): Expected output of the neural network.
 
     Returns:
-        (float): Cross entropy loss of the neural network.
+        (np.array): Classification of the images as a single dimensional array.
 
     """
-    batch_size = out.shape[0]
-    loss = (-1 / batch_size) * np.sum(np.multiply(expected_out, np.log(out)) + \
-           np.multiply(1 - expected_out, np.log(1 - out)))
-    return np.squeeze(loss)
+    return np.argmax(out, axis=0)
 
 
 class NeuralNetwork:
@@ -77,7 +73,7 @@ class NeuralNetwork:
     Module implementing a multi-layer perceptron neural network.
     """
 
-    def __init__(self, model, learning_rate=0.01, batch_size=32, epochs=50):
+    def __init__(self, model, learning_rate=0.01, batch_size=32, epochs=30):
         """
         Method to initialize the neural network.
 
@@ -90,7 +86,7 @@ class NeuralNetwork:
                 )
             learning_rate(float): Learning rate of the neural network. Defaults to 0.01.
             batch_size(int): Batch size of inputs to use for training. Defaults to 32.
-            epochs(int): Number of iterations to run the training for. Defaults to 50.
+            epochs(int): Number of iterations to run the training for. Defaults to 30.
 
         """
         # Hyper parameters for training.
@@ -126,6 +122,9 @@ class NeuralNetwork:
         Args:
             input_batch(np.array): Matrix containing an input batch.
 
+        Returns:
+            (np.array): Matrix with the output of the neural network.
+
         """
         self.ws1 = np.dot(self.w1, input_batch) + self.b1
         self.out1 = sigmoid(self.ws1)
@@ -135,6 +134,7 @@ class NeuralNetwork:
 
         self.ws_out = np.dot(self.w_out, self.ws2) + self.b_out
         self.out_final = softmax(self.ws_out)
+        return self.out_final
 
     def backward_pass(self, input_batch, expected_output):
         """
@@ -190,8 +190,8 @@ class NeuralNetwork:
                 self.forward_pass(images[batch_idx : batch_idx + self.batch_size].T)
                 self.backward_pass(images[batch_idx : batch_idx + self.batch_size].T,
                                    labels[batch_idx : batch_idx + self.batch_size].T)
-                output = np.argmax(self.out_final, axis=0)
-                expected_output = np.argmax(labels[batch_idx : batch_idx + self.batch_size].T, axis=0)
+                output = classify(self.out_final)
+                expected_output = classify(labels[batch_idx : batch_idx + self.batch_size].T)
                 num_correct += len([0 for i in range(len(output)) if output[i] == expected_output[i]])
 
             accuracy = num_correct / num_samples
@@ -211,6 +211,17 @@ if __name__ == "__main__":
     # Convert labels to one hot encoding for easier backpropagation.
     one_hot_train_labels = np.zeros((train_labels.size, train_labels.max() + 1))
     one_hot_train_labels[np.arange(train_labels.size), train_labels] = 1
+    one_hot_test_labels = np.zeros((test_labels.size, test_labels.max() + 1))
+    one_hot_test_labels[np.arange(test_labels.size), test_labels] = 1
 
+    # Creating and training the neural network.
     neural_network = NeuralNetwork((784, 512, 256, 10))
     neural_network.train(train_images, one_hot_train_labels)
+
+    # Getting the predictions from the testing dataset and getting the prediction accuracy.
+    nn_output = neural_network.forward_pass(test_images)
+    output = classify(nn_output)
+    expected_output = classify(one_hot_test_labels.T)
+    num_correct = len([0 for i in range(len(output)) if output[i] == expected_output[i]])
+    num_samples = len(test_images)
+    print("Testing dataset accuracy: {}".format(num_correct / num_samples))
