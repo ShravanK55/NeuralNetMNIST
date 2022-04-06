@@ -51,7 +51,7 @@ def softmax(x):
 
     """
     inp_exp = np.exp(x)
-    return inp_exp / np.sum(inp_exp, axis=1, keepdims=True)
+    return inp_exp / np.sum(inp_exp, axis=0, keepdims=True)
 
 
 def cross_entropy_loss(out, expected_out):
@@ -77,7 +77,7 @@ class NeuralNetwork:
     Module implementing a multi-layer perceptron neural network.
     """
 
-    def __init__(self, model, learning_rate=0.01, batch_size=64, epochs=50):
+    def __init__(self, model, learning_rate=0.01, batch_size=32, epochs=50):
         """
         Method to initialize the neural network.
 
@@ -89,7 +89,7 @@ class NeuralNetwork:
                     output_layer_nodes(int)
                 )
             learning_rate(float): Learning rate of the neural network. Defaults to 0.01.
-            batch_size(int): Batch size of inputs to use for training. Defaults to 64.
+            batch_size(int): Batch size of inputs to use for training. Defaults to 32.
             epochs(int): Number of iterations to run the training for. Defaults to 50.
 
         """
@@ -135,7 +135,6 @@ class NeuralNetwork:
 
         self.ws_out = np.dot(self.w_out, self.ws2) + self.b_out
         self.out_final = softmax(self.ws_out)
-        print("Out final shape: {}".format(self.out_final.shape))
 
     def backward_pass(self, input_batch, expected_output):
         """
@@ -173,19 +172,30 @@ class NeuralNetwork:
         self.w_out = self.w_out - (self.learning_rate * d_w_out)
         self.b_out = self.b_out - (self.learning_rate * d_b_out)
 
-    def classify(self, input):
+    def train(self, images, labels):
         """
-        Method to perform classification of the input from the neural network.
+        Method to train the neural network.
 
         Args:
-            input(np.array): Matrix containing an input batch.
-
-        Returns:
-            (np.array): Array with the predictions for the input batch.
+            images(np.array): Training image data. Must be of dimension (num_samples, image_size).
+            labels(np.array): Training image labels with one hot encoding. Must be of dimension
+                (num_samples, num_classifcations).
 
         """
-        self.forward_pass(input)
-        return np.argmax(self.out_final, axis=1)
+        for epoch in range(self.epochs):
+            print("Epoch {}.".format(epoch))
+            num_samples = len(images)
+            num_correct = 0
+            for batch_idx in range(0, len(images), self.batch_size):
+                self.forward_pass(images[batch_idx : batch_idx + self.batch_size].T)
+                self.backward_pass(images[batch_idx : batch_idx + self.batch_size].T,
+                                   labels[batch_idx : batch_idx + self.batch_size].T)
+                output = np.argmax(self.out_final, axis=0)
+                expected_output = np.argmax(labels[batch_idx : batch_idx + self.batch_size].T, axis=0)
+                num_correct += len([0 for i in range(len(output)) if output[i] == expected_output[i]])
+
+            accuracy = num_correct / num_samples
+            print("Accuracy: {}".format(accuracy))
 
 
 if __name__ == "__main__":
@@ -193,20 +203,14 @@ if __name__ == "__main__":
     TEST_LABEL_PATH = "data/test_label.csv"
     OUTPUT_PATH = "data/test_predictions.csv"
 
-    train_images = np.loadtxt(train_img_path, dtype=np.float64, delimiter=',')
+    train_images = np.loadtxt(train_img_path, dtype=np.float64, delimiter=',') / 255
     train_labels = np.loadtxt(train_label_path, dtype=int, delimiter=',')
-    test_images = np.loadtxt(test_img_path, dtype=np.float64, delimiter=',')
+    test_images = np.loadtxt(test_img_path, dtype=np.float64, delimiter=',') / 255
     test_labels = np.loadtxt(TEST_LABEL_PATH, dtype=int, delimiter=',')
 
     # Convert labels to one hot encoding for easier backpropagation.
     one_hot_train_labels = np.zeros((train_labels.size, train_labels.max() + 1))
     one_hot_train_labels[np.arange(train_labels.size), train_labels] = 1
 
-    # Convert the values in the dataset to the range of 0-1.
-    train_images /= 255
-    test_images /= 255
-
     neural_network = NeuralNetwork((784, 512, 256, 10))
-    predictions = neural_network.classify(train_images[:32].T)
-    print("Predictions shape: {}".format(predictions.shape))
-    neural_network.backward_pass(train_images[:32].T, one_hot_train_labels[:32].T)
+    neural_network.train(train_images, one_hot_train_labels)
