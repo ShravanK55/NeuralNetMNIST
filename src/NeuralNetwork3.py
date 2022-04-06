@@ -16,13 +16,27 @@ def sigmoid(x):
     Sigmoid activation function.
 
     Args:
-        x(np.array): Matrix to perform the sigmoid activation for.
+        x(np.array): Matrix to apply the sigmoid activation for.
 
     Returns:
         (np.array): Matrix computed using the sigmoid activation function on the input.
 
     """
     return 1.0 / (1.0 + np.exp(-x))
+
+
+def sigmoid_derivative(x):
+    """
+    Derivative of the Sigmoid activation function.
+
+    Args:
+        x(np.array): Matrix to apply the sigmoid activation derivative for.
+
+    Returns:
+        (np.array): Matrix computed using the sigmoid activation function derivative on the input.
+
+    """
+    return x * (1 - x)
 
 
 def softmax(x):
@@ -38,6 +52,24 @@ def softmax(x):
     """
     inp_exp = np.exp(x)
     return inp_exp / np.sum(inp_exp, axis=1, keepdims=True)
+
+
+def cross_entropy_loss(out, expected_out):
+    """
+    Function to calculate the cross entropy loss.
+
+    Args:
+        out(np.array): Output of the neural network.
+        expected_out(np.array): Expected output of the neural network.
+
+    Returns:
+        (float): Cross entropy loss of the neural network.
+
+    """
+    batch_size = out.shape[0]
+    loss = (-1 / batch_size) * np.sum(np.multiply(expected_out, np.log(out)) + \
+           np.multiply(1 - expected_out, np.log(1 - out)))
+    return np.squeeze(loss)
 
 
 class NeuralNetwork:
@@ -66,15 +98,16 @@ class NeuralNetwork:
         self.batch_size = batch_size
         self.epochs = epochs
 
+        # Initialization of weights and biases using Xavier initialization.
         # Weights of the connections between each layer.
-        self.w1 = np.random.rand(model[0], model[1]) * np.sqrt(1.0 / model[0])
-        self.w2 = np.random.rand(model[1], model[2]) * np.sqrt(1.0 / model[1])
-        self.w_out = np.random.rand(model[2], model[3]) * np.sqrt(1.0 / model[2])
+        self.w1 = np.random.randn(model[1], model[0]) * np.sqrt(1.0 / (model[0] + model[1]))
+        self.w2 = np.random.randn(model[2], model[1]) * np.sqrt(1.0 / (model[1] + model[2]))
+        self.w_out = np.random.randn(model[3], model[2]) * np.sqrt(1.0 / (model[2] + model[3]))
 
         # Biases for activation at each layer.
-        self.b1 = np.random.rand(1, model[1]) * np.sqrt(1.0 / model[0])
-        self.b2 = np.random.rand(1, model[2]) * np.sqrt(1.0 / model[1])
-        self.b_out = np.random.rand(1, model[3]) * np.sqrt(1.0 / model[2])
+        self.b1 = np.random.randn(model[1], 1) * np.sqrt(1.0 / (model[0] + model[1]))
+        self.b2 = np.random.randn(model[2], 1) * np.sqrt(1.0 / (model[1] + model[2]))
+        self.b_out = np.random.randn(model[3], 1) * np.sqrt(1.0 / (model[2] + model[3]))
 
         # Cache of the weighted sum at each layer.
         self.ws1 = []
@@ -86,22 +119,59 @@ class NeuralNetwork:
         self.out2 = []
         self.out_final = []
 
-    def forward_pass(self, input):
+    def forward_pass(self, input_batch):
         """
         Method to perform a forward pass through the neural network.
 
         Args:
-            input(np.array): Matrix containing an input batch.
+            input_batch(np.array): Matrix containing an input batch.
 
         """
-        self.ws1 = np.dot(input, self.w1) + self.b1
+        self.ws1 = np.dot(self.w1, input_batch) + self.b1
         self.out1 = sigmoid(self.ws1)
 
-        self.ws2 = np.dot(self.ws1, self.w2) + self.b2
+        self.ws2 = np.dot(self.w2, self.ws1) + self.b2
         self.out2 = sigmoid(self.ws2)
 
-        self.ws_out = np.dot(self.ws2, self.w_out) + self.b_out
+        self.ws_out = np.dot(self.w_out, self.ws2) + self.b_out
         self.out_final = softmax(self.ws_out)
+        print("Out final shape: {}".format(self.out_final.shape))
+
+    def backward_pass(self, input_batch, expected_output):
+        """
+        Method to perform a backward pass to update weights and biases in the neural network.
+
+        Args:
+            input_batch(np.array): Matrix containing an input batch.
+            expected_output(np.array): Expected output of the neural network with one hot encoding.
+
+        """
+        # Error at the output layer.
+        d_out_final = self.out_final - expected_output
+
+        # Backpropagation parameters for weights and biases at the output layer.
+        d_w_out = np.dot(d_out_final, self.out2.T) / self.batch_size
+        d_b_out = np.sum(d_out_final, axis=1, keepdims=True) / self.batch_size
+
+        # Backpropagation parameters for weights and biases at the second hidden layer.
+        d_out2 = np.dot(self.w_out.T, d_out_final)
+        d_ws2 = d_out2 * sigmoid_derivative(self.out2)
+        d_w2 = np.dot(d_ws2, self.out1.T) / self.batch_size
+        d_b2 = np.sum(d_ws2, axis=1, keepdims=True) / self.batch_size
+
+        # Backpropagation parameters for weights and biases at the first hidden layer.
+        d_out1 = np.dot(self.w2.T, d_ws2)
+        d_ws1 = d_out1 * sigmoid_derivative(self.out1)
+        d_w1 = np.dot(d_ws1, input_batch.T) / self.batch_size
+        d_b1 = np.sum(d_ws1, axis=1, keepdims=True) / self.batch_size
+
+        # Updating weights and biases.
+        self.w1 = self.w1 - (self.learning_rate * d_w1)
+        self.b1 = self.b1 - (self.learning_rate * d_b1)
+        self.w2 = self.w2 - (self.learning_rate * d_w2)
+        self.b2 = self.b2 - (self.learning_rate * d_b2)
+        self.w_out = self.w_out - (self.learning_rate * d_w_out)
+        self.b_out = self.b_out - (self.learning_rate * d_b_out)
 
     def classify(self, input):
         """
@@ -128,9 +198,15 @@ if __name__ == "__main__":
     test_images = np.loadtxt(test_img_path, dtype=np.float64, delimiter=',')
     test_labels = np.loadtxt(TEST_LABEL_PATH, dtype=int, delimiter=',')
 
+    # Convert labels to one hot encoding for easier backpropagation.
+    one_hot_train_labels = np.zeros((train_labels.size, train_labels.max() + 1))
+    one_hot_train_labels[np.arange(train_labels.size), train_labels] = 1
+
     # Convert the values in the dataset to the range of 0-1.
     train_images /= 255
     test_images /= 255
 
     neural_network = NeuralNetwork((784, 512, 256, 10))
-    predictions = neural_network.classify(train_images[:32])
+    predictions = neural_network.classify(train_images[:32].T)
+    print("Predictions shape: {}".format(predictions.shape))
+    neural_network.backward_pass(train_images[:32].T, one_hot_train_labels[:32].T)
